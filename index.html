@@ -2,257 +2,45 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Instrument Analyzer Pro</title>
-    <style>
-        :root {
-            --bg: #0f0f0f; --card: #1a1a1a; --accent: #00e676; --compare: #2196f3; --error: #ff1744;
-        }
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: #eee; margin: 0; padding: 15px; line-height: 1.4; }
-        .container { max-width: 800px; margin: 0 auto; }
-        
-        /* ガイド表示 */
-        .guide-box { background: #222; border-left: 4px solid var(--accent); padding: 12px; margin-bottom: 15px; font-size: 13px; border-radius: 0 8px 8px 0; }
-        .guide-title { font-weight: bold; color: var(--accent); margin-bottom: 5px; display: block; }
-
-        /* モード切替 */
-        .mode-selector { display: flex; background: #333; border-radius: 25px; margin-bottom: 15px; padding: 5px; }
-        .mode-btn { flex: 1; padding: 10px; border: none; background: none; color: #888; border-radius: 20px; cursor: pointer; transition: 0.3s; font-weight: bold; }
-        .mode-btn.active { background: #555; color: white; }
-        .mode-btn.active.pro { color: var(--accent); }
-
-        /* メインビジュアル */
-        .canvas-container { position: relative; background: #000; border-radius: 12px; padding: 20px; border: 1px solid #333; }
-        canvas { width: 100%; height: 200px; display: block; }
-        
-        /* カウントダウンオーバーレイ */
-        #overlay { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center;
-            font-size: 60px; font-weight: bold; color: var(--accent); border-radius: 12px; z-index: 10;
-        }
-
-        .panel { background: var(--card); padding: 15px; border-radius: 12px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        button { padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; }
-        button:active { transform: scale(0.98); }
-        .btn-rec { background: #333; color: white; border: 1px solid #444; }
-        .btn-main { grid-column: span 2; background: var(--compare); color: white; font-size: 16px; }
-        .pro-active .btn-main { background: var(--accent); color: black; }
-
-        /* 検査レポート */
-        .report { margin-top: 15px; display: none; background: var(--card); border: 2px solid var(--accent); padding: 15px; border-radius: 12px; }
-        .metric-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333; }
-        .pass { color: var(--accent); } .fail { color: var(--error); }
-        .judgement { text-align: center; font-size: 24px; font-weight: bold; margin-top: 15px; padding: 10px; border-radius: 8px; }
-        .pass-bg { background: rgba(0, 230, 118, 0.1); }
-        .fail-bg { background: rgba(255, 23, 68, 0.1); }
-
-        @media (max-width: 600px) { .panel { grid-template-columns: 1fr; } .btn-main { grid-column: span 1; } }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="compare-mode">
+    <div class="container">
+        <!-- モード切替 -->
+        <div class="mode-selector">
+            <button id="modeCompare" class="mode-btn">比較モード (Compare)</button>
+            <button id="modeInspect" class="mode-btn">検査モード (Inspect)</button>
+        </div>
 
-<div class="container">
-    <div class="mode-selector">
-        <button id="modeCompare" class="mode-btn active">比較モード (Compare)</button>
-        <button id="modeInspect" class="mode-btn">検査モード (Inspect)</button>
+        <!-- 手順ガイド -->
+        <div class="guide-box" id="guide">
+            <span class="guide-title">📋 手順ガイド</span>
+            <div id="guideText">AとB、それぞれの楽器で同じフレーズを録音してください。</div>
+        </div>
+
+        <div id="status" class="status-indicator">STANDBY</div>
+
+        <!-- メインキャンバス -->
+        <div class="canvas-container">
+            <div id="overlay">3</div>
+            <canvas id="visualizer"></canvas>
+        </div>
+
+        <!-- 操作パネル -->
+        <div class="control-panel">
+            <div class="rec-group">
+                <button id="recA" class="btn-rec">Snapshot A 録音</button>
+                <button id="recB" class="btn-rec">Snapshot B 録音</button>
+            </div>
+            <button id="actionBtn" class="btn-main">解析を実行</button>
+            <button id="resetBtn" class="btn-reset">データを消去してリセット</button>
+        </div>
+
+        <!-- 結果表示エリア -->
+        <div id="resultArea"></div>
     </div>
-
-    <div class="guide-box" id="guide">
-        <span class="guide-title">📋 検査手順</span>
-        1. 楽器をマイクから30cmの位置に固定します。<br>
-        2. ボタンを押し、カウントダウンに合わせて「ロングトーン」を開始してください。<br>
-        3. 安定した音を3秒間維持してください。
-    </div>
-
-    <div id="status" style="text-align:center; color:var(--accent); font-size:12px; margin-bottom:5px; font-weight:bold;">STANDBY</div>
-
-    <div class="canvas-container">
-        <div id="overlay">3</div>
-        <canvas id="visualizer"></canvas>
-    </div>
-
-    <div class="panel" id="controlPanel">
-        <button id="recA" class="btn-rec">Snapshot A 録音</button>
-        <button id="recB" class="btn-rec">Snapshot B 録音</button>
-        <button id="actionBtn" class="btn-main">解析を実行</button>
-        <button onclick="location.reload()" style="background:none; color:#666; font-size:11px; grid-column:span 2;">データを消去してリセット</button>
-    </div>
-
-    <div id="resultArea"></div>
-</div>
-
-<script>
-    let audioCtx, analyser, dataArray;
-    let snapA = null, snapB = null;
-    let currentMode = 'compare';
-    let isRecording = false;
-
-    const canvas = document.getElementById('visualizer');
-    const ctx = canvas.getContext('2d');
-    const overlay = document.getElementById('overlay');
-    const statusText = document.getElementById('status');
-
-    // モード切替
-    document.getElementById('modeCompare').onclick = () => switchMode('compare');
-    document.getElementById('modeInspect').onclick = () => switchMode('inspect');
-
-    function switchMode(mode) {
-        currentMode = mode;
-        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(mode === 'compare' ? 'modeCompare' : 'modeInspect').classList.add('active');
-        document.body.classList.toggle('pro-active', mode === 'inspect');
-        
-        const guide = document.getElementById('guide');
-        if(mode === 'inspect') {
-            document.getElementById('recB').style.display = 'none';
-            document.getElementById('recA').innerText = '検査録音を開始';
-            guide.innerHTML = `<span class="guide-title">📋 プロ検査手順</span>
-                1. 雑音のない環境で実行してください。<br>
-                2. 録音開始後、3秒間安定した音（一定の強さ）を出してください。<br>
-                3. 倍音構造とアタックの明瞭度から品質を自動判定します。`;
-        } else {
-            document.getElementById('recB').style.display = 'block';
-            document.getElementById('recA').innerText = 'Snapshot A 録音';
-            guide.innerHTML = `<span class="guide-title">📋 比較手順</span>
-                1. AとB、それぞれの楽器で同じフレーズを吹きます。<br>
-                2. 両方の録音完了後、「解析を実行」で特性を重ね合わせます。`;
-        }
-    }
-
-    async function initAudio() {
-        if(!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const source = audioCtx.createMediaStreamSource(stream);
-            analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 2048;
-            dataArray = new Uint8Array(analyser.frequencyBinCount);
-            source.connect(analyser);
-            draw();
-        }
-    }
-
-    async function startRecordingSequence(target) {
-        await initAudio();
-        
-        // カウントダウン
-        overlay.style.display = 'flex';
-        let count = 3;
-        overlay.innerText = count;
-        
-        const countTimer = setInterval(() => {
-            count--;
-            if(count > 0) {
-                overlay.innerText = count;
-            } else {
-                clearInterval(countTimer);
-                overlay.innerText = "START!";
-                setTimeout(() => { 
-                    overlay.style.display = 'none';
-                    executeRecording(target);
-                }, 500);
-            }
-        }, 1000);
-    }
-
-    function executeRecording(target) {
-        isRecording = true;
-        statusText.innerText = "RECORDING...";
-        let samples = [];
-        let startTime = Date.now();
-        let attackFound = false;
-        let attackTime = 0;
-
-        const timer = setInterval(() => {
-            analyser.getByteFrequencyData(dataArray);
-            samples.push(new Uint8Array(dataArray));
-            
-            // アタック検知（一定以上の音量に達する時間）
-            let maxVal = Math.max(...dataArray);
-            if(maxVal > 150 && !attackFound) {
-                attackTime = Date.now() - startTime;
-                attackFound = true;
-            }
-
-            if (samples.length >= 75) { // 約3秒
-                clearInterval(timer);
-                let avg = new Float32Array(analyser.frequencyBinCount);
-                for(let i=0; i<avg.length; i++) {
-                    avg[i] = samples.reduce((s, a) => s + a[i], 0) / samples.length;
-                }
-                
-                if(target === 'A') snapA = {data: avg, attack: attackTime};
-                else snapB = {data: avg, attack: attackTime};
-                
-                isRecording = false;
-                statusText.innerText = "COMPLETE";
-                document.getElementById(target === 'A' ? 'recA' : 'recB').innerText += " (済)";
-            }
-        }, 40);
-    }
-
-    function draw() {
-        requestAnimationFrame(draw);
-        analyser.getByteFrequencyData(dataArray);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // グリッド
-        ctx.strokeStyle = '#222';
-        ctx.lineWidth = 1;
-        for(let i=1; i<4; i++) {
-            ctx.beginPath(); ctx.moveTo(i*(canvas.width/4), 0); ctx.lineTo(i*(canvas.width/4), canvas.height); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(0, i*(canvas.height/4)); ctx.lineTo(canvas.width, i*(canvas.height/4)); ctx.stroke();
-        }
-
-        if(snapA) drawLine(snapA.data, 'var(--compare)', 2);
-        if(snapB) drawLine(snapB.data, 'var(--error)', 2);
-        if(isRecording || (!snapA && !snapB)) drawLine(dataArray, '#fff', 1);
-    }
-
-    function drawLine(data, color, width) {
-        ctx.strokeStyle = color; ctx.lineWidth = width;
-        ctx.beginPath();
-        let slice = canvas.width / (data.length / 4);
-        for(let i=0; i<data.length/4; i++) {
-            let y = canvas.height - (data[i]/255 * canvas.height);
-            if(i===0) ctx.moveTo(0, y); else ctx.lineTo(i*slice, y);
-        }
-        ctx.stroke();
-    }
-
-    document.getElementById('actionBtn').onclick = () => {
-        if(!snapA) return;
-        const resArea = document.getElementById('resultArea');
-        
-        if(currentMode === 'compare') {
-            if(!snapB) return;
-            resArea.innerHTML = `<div class="report" style="display:block; border-color:var(--compare)">
-                <h3 style="margin-top:0">比較結果レポート</h3>
-                <p>青(A)と赤(B)のグラフを比較しました。山の高さが高い方は、その周波数帯域における共鳴が強いことを意味します。</p>
-            </div>`;
-        } else {
-            // Proモード解析（擬似スコアリングロジック）
-            const harmonicsScore = Math.min(100, Math.floor(Math.random() * 15 + 82));
-            const attackTime = snapA.attack || 42;
-            const stability = Math.floor(Math.random() * 8 + 90);
-            const isPass = harmonicsScore > 85 && attackTime < 60;
-
-            resArea.innerHTML = `
-                <div class="report" style="display:block">
-                    <h3 style="color:var(--accent); margin-top:0;">QUALITY INSPECTION REPORT</h3>
-                    <div class="metric-row"><span>Harmonics (倍音純度)</span><span class="${harmonicsScore > 85 ? 'pass' : 'fail'}">${harmonicsScore}/100</span></div>
-                    <div class="metric-row"><span>Attack (応答速度)</span><span class="${attackTime < 60 ? 'pass' : 'fail'}">${attackTime}ms</span></div>
-                    <div class="metric-row"><span>Stability (減衰安定性)</span><span class="${stability > 85 ? 'pass' : 'fail'}">${stability}%</span></div>
-                    <div class="judgement ${isPass ? 'pass pass-bg' : 'fail fail-bg'}">
-                        ${isPass ? 'RESULT: PASS (出荷適合)' : 'RESULT: FAIL (調整が必要)'}
-                    </div>
-                </div>`;
-        }
-    };
-
-    document.getElementById('recA').onclick = () => startRecordingSequence('A');
-    document.getElementById('recB').onclick = () => startRecordingSequence('B');
-</script>
+    <script src="script.js"></script>
 </body>
 </html>
