@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <link rel="manifest" href="./manifest.json">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Instrument Analyzer Pro</title>
     <link rel="stylesheet" href="style.css">
@@ -42,5 +43,15 @@
         <div id="resultArea"></div>
     </div>
     <script src="script.js"></script>
+    <script>
+        // サービスワーカー（sw.js）をブラウザに登録する
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('Service Worker registered!'))
+                .catch(err => console.error('Service Worker failed:', err));
+            });
+        }
+    </script>
 </body>
 </html>
