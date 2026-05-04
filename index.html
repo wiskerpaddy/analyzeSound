@@ -12,7 +12,6 @@
             --color-b: #e74c3c;
             --accent: #f1c40f;
             --recording: #c0392b;
-            --grid-color: #333;
         }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg-color); color: white; margin: 0; padding: 15px; }
         .container { max-width: 900px; margin: 0 auto; }
@@ -20,12 +19,10 @@
         h1 { font-size: 1.5rem; text-align: center; margin-bottom: 10px; }
         .status { color: var(--accent); font-size: 13px; text-align: center; margin-bottom: 10px; height: 1.2em; font-weight: bold; }
 
-        /* グラフコンテナ */
-        .canvas-container { position: relative; background: #000; border-radius: 10px; padding: 20px 10px 30px 40px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .canvas-container { position: relative; background: #000; border-radius: 10px; padding: 20px 10px 30px 40px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); overflow: hidden; }
         canvas { width: 100%; height: 250px; display: block; }
         
-        /* 軸ラベル */
-        .axis-label { position: absolute; font-size: 10px; color: #888; }
+        .axis-label { position: absolute; font-size: 10px; color: #888; pointer-events: none; }
         .y-label { left: 5px; transform: translateY(-50%); }
         .x-label { bottom: 5px; transform: translateX(-50%); }
 
@@ -58,17 +55,15 @@
 
 <div class="container">
     <h1>Universal Instrument Analyzer</h1>
-    <div class="status" id="status-msg">マイクを許可して解析を開始</div>
+    <div class="status" id="status-msg">マイクを許可して開始</div>
     
     <div class="canvas-container">
-        <!-- 縦軸目盛り -->
-        <div class="axis-label y-label" style="top: 10%;">dB</div>
-        <div class="axis-label y-label" style="top: 50%;">mid</div>
-        <div class="axis-label y-label" style="top: 90%;">low</div>
+        <div class="axis-label y-label" style="top: 10%;">High</div>
+        <div class="axis-label y-label" style="top: 50%;">Mid</div>
+        <div class="axis-label y-label" style="top: 90%;">Low</div>
         
         <canvas id="visualizer"></canvas>
 
-        <!-- 横軸目盛り (低域〜中域をメインに表示) -->
         <div class="axis-label x-label" style="left: 0%;">0Hz</div>
         <div class="axis-label x-label" style="left: 25%;">1kHz</div>
         <div class="axis-label x-label" style="left: 50%;">2kHz</div>
@@ -81,7 +76,7 @@
     <div class="panel">
         <button id="recordA" class="btn-a" data-original="Snapshot A を録音">Snapshot A を録音</button>
         <button id="recordB" class="btn-b" data-original="Snapshot B を録音">Snapshot B を録音</button>
-        <button id="analyze" class="btn-analyze">🔮 音響特性を比較診断</button>
+        <button id="analyze" class="btn-analyze">🔮 比較診断を実行</button>
         <button id="reset" class="btn-reset">リセット</button>
     </div>
 
@@ -91,6 +86,7 @@
 <script>
     let audioCtx, analyser, dataArray;
     let snapshotA = null, snapshotB = null;
+    let isRecordingNow = false;
 
     const canvas = document.getElementById('visualizer');
     const ctx = canvas.getContext('2d');
@@ -116,9 +112,12 @@
         if (!audioCtx) await setupAudio();
         const btn = document.getElementById(btnId);
         const originalText = btn.getAttribute('data-original');
+        
+        isRecordingNow = true;
         btn.classList.add('is-recording');
         btn.innerText = "● 録音中...";
         progressContainer.style.display = 'block';
+        
         let samples = [];
         const maxSamples = 60;
 
@@ -126,6 +125,7 @@
             analyser.getByteFrequencyData(dataArray);
             samples.push(new Uint8Array(dataArray));
             progressBar.style.width = (samples.length / maxSamples * 100) + '%';
+
             if (samples.length >= maxSamples) {
                 clearInterval(timer);
                 const avg = new Float32Array(analyser.frequencyBinCount);
@@ -134,10 +134,12 @@
                 }
                 if (target === 'A') snapshotA = avg;
                 else snapshotB = avg;
+
+                isRecordingNow = false;
                 btn.classList.remove('is-recording');
-                btn.innerText = originalText + " (済)";
+                btn.innerText = originalText + " (保存済)";
                 progressContainer.style.display = 'none';
-                statusMsg.innerText = `Snapshot ${target} 完了`;
+                statusMsg.innerText = (snapshotA && snapshotB) ? "比較の準備が整いました" : `Snapshot ${target} 完了`;
             }
         }, 50);
     }
@@ -150,26 +152,26 @@
         // 背景グリッド描画
         ctx.strokeStyle = "#222";
         ctx.lineWidth = 1;
-        // 縦線
         for(let i=0; i<=4; i++) {
             let x = canvas.width * (i/4);
             ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-        }
-        // 横線
-        for(let i=0; i<=4; i++) {
             let y = canvas.height * (i/4);
             ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
         }
 
-        if (snapshotA) drawGraph(snapshotA, 'rgba(52, 152, 219, 0.7)', 2);
-        if (snapshotB) drawGraph(snapshotB, 'rgba(231, 76, 60, 0.7)', 2);
-        drawGraph(dataArray, 'rgba(255, 255, 255, 0.5)', 1);
+        // 保存されたデータの描画
+        if (snapshotA) drawGraph(snapshotA, 'rgba(52, 152, 219, 0.8)', 3);
+        if (snapshotB) drawGraph(snapshotB, 'rgba(231, 76, 60, 0.8)', 3);
+
+        // 【修正点】録音中、または片方の録音しか終わっていない時だけリアルタイム波形を表示
+        if (isRecordingNow || (!snapshotA || !snapshotB)) {
+            drawGraph(dataArray, 'rgba(255, 255, 255, 0.4)', 1);
+        }
     }
 
     function drawGraph(data, color, width) {
         ctx.strokeStyle = color; ctx.lineWidth = width;
         ctx.beginPath();
-        // サックス等の楽器の主成分である4kHzまでをクローズアップ (サンプルレートの約1/10)
         const displayLimit = data.length / 4; 
         const sliceWidth = canvas.width / displayLimit; 
         let x = 0;
@@ -186,13 +188,14 @@
         const getSum = arr => arr.reduce((a, b) => a + b, 0);
         const pA = getSum(snapshotA); const pB = getSum(snapshotB);
         const diff = (pB - pA) / pA * 100;
-        let verdict = Math.abs(diff) < 2.0 ? "音響的差異：微小" : (diff > 0 ? "Snapshot B 優勢" : "Snapshot A 優勢");
+        let verdict = Math.abs(diff) < 2.0 ? "音響的差異：微小" : (diff > 0 ? "B の方がエネルギー高" : "A の方がエネルギー高");
+        
         document.getElementById('result-display').innerHTML = `
             <div class="result-card">
-                <h2 class="result-title">分析レポート</h2>
+                <h2 class="result-title">比較分析レポート</h2>
                 <p><strong>${verdict}</strong></p>
                 <p style="font-size: 14px;">エネルギー差: ${Math.abs(diff).toFixed(1)}%</p>
-                <p style="font-size: 14px; color: var(--accent);">グラフの各ピークは「倍音」を示します。ピークが高いほど、その帯域が豊かに響いています。</p>
+                <p style="font-size: 13px; color: #bbb;">※グラフが静止しているため、波形の山の重なりを詳しく比較できます。</p>
             </div>`;
     });
 
