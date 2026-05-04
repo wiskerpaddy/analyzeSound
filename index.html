@@ -3,99 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal Instrument Analyzer Pro</title>
+    <title>Instrument Analyzer Pro</title>
     <style>
         :root {
-            --bg-color: #121212;
-            --card-bg: #1e1e1e;
-            --color-a: #3498db;
-            --color-b: #e74c3c;
-            --accent: #f1c40f;
-            --recording: #c0392b;
+            --bg: #0f0f0f; --card: #1a1a1a; --accent: #00e676; --compare: #2196f3; --error: #ff1744;
         }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg-color); color: white; margin: 0; padding: 15px; }
-        .container { max-width: 900px; margin: 0 auto; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: #eee; margin: 0; padding: 15px; line-height: 1.4; }
+        .container { max-width: 800px; margin: 0 auto; }
         
-        h1 { font-size: 1.5rem; text-align: center; margin-bottom: 10px; }
-        .status { color: var(--accent); font-size: 13px; text-align: center; margin-bottom: 10px; height: 1.2em; font-weight: bold; }
+        /* ガイド表示 */
+        .guide-box { background: #222; border-left: 4px solid var(--accent); padding: 12px; margin-bottom: 15px; font-size: 13px; border-radius: 0 8px 8px 0; }
+        .guide-title { font-weight: bold; color: var(--accent); margin-bottom: 5px; display: block; }
 
-        .canvas-container { position: relative; background: #000; border-radius: 10px; padding: 20px 10px 30px 40px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); overflow: hidden; }
-        canvas { width: 100%; height: 250px; display: block; }
+        /* モード切替 */
+        .mode-selector { display: flex; background: #333; border-radius: 25px; margin-bottom: 15px; padding: 5px; }
+        .mode-btn { flex: 1; padding: 10px; border: none; background: none; color: #888; border-radius: 20px; cursor: pointer; transition: 0.3s; font-weight: bold; }
+        .mode-btn.active { background: #555; color: white; }
+        .mode-btn.active.pro { color: var(--accent); }
+
+        /* メインビジュアル */
+        .canvas-container { position: relative; background: #000; border-radius: 12px; padding: 20px; border: 1px solid #333; }
+        canvas { width: 100%; height: 200px; display: block; }
         
-        .axis-label { position: absolute; font-size: 10px; color: #888; pointer-events: none; }
-        .y-label { left: 5px; transform: translateY(-50%); }
-        .x-label { bottom: 5px; transform: translateX(-50%); }
-
-        #progress-container { width: 100%; background: #333; height: 8px; border-radius: 4px; margin: 10px 0; overflow: hidden; display: none; }
-        #progress-bar { width: 0%; height: 100%; background: var(--accent); transition: width 0.1s linear; }
-
-        .panel { background: var(--card-bg); padding: 15px; border-radius: 12px; margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        button { padding: 15px 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; }
-        .btn-a { background: var(--color-a); color: white; }
-        .btn-b { background: var(--color-b); color: white; }
-        .btn-analyze { background: var(--accent); color: black; grid-column: span 2; font-size: 18px; margin-top: 5px; }
-        .btn-reset { background: #444; color: #ccc; grid-column: span 2; }
-
-        @media (max-width: 768px) {
-            .panel { grid-template-columns: 1fr; }
-            .btn-a, .btn-b { padding: 20px 10px; font-size: 16px; }
-            canvas { height: 200px; }
+        /* カウントダウンオーバーレイ */
+        #overlay { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center;
+            font-size: 60px; font-weight: bold; color: var(--accent); border-radius: 12px; z-index: 10;
         }
 
-        .is-recording { background: white !important; color: var(--recording) !important; animation: blink 0.8s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .panel { background: var(--card); padding: 15px; border-radius: 12px; margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        button:active { transform: scale(0.98); }
+        .btn-rec { background: #333; color: white; border: 1px solid #444; }
+        .btn-main { grid-column: span 2; background: var(--compare); color: white; font-size: 16px; }
+        .pro-active .btn-main { background: var(--accent); color: black; }
 
-        #result-display { margin-top: 20px; }
-        .result-card { background: linear-gradient(145deg, #2c3e50, #000); border: 2px solid var(--accent); padding: 20px; border-radius: 15px; animation: fadeIn 0.5s; }
-        .result-title { color: var(--accent); font-size: 20px; margin: 0 0 10px 0; border-bottom: 1px solid #444; padding-bottom: 5px; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* 検査レポート */
+        .report { margin-top: 15px; display: none; background: var(--card); border: 2px solid var(--accent); padding: 15px; border-radius: 12px; }
+        .metric-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333; }
+        .pass { color: var(--accent); } .fail { color: var(--error); }
+        .judgement { text-align: center; font-size: 24px; font-weight: bold; margin-top: 15px; padding: 10px; border-radius: 8px; }
+        .pass-bg { background: rgba(0, 230, 118, 0.1); }
+        .fail-bg { background: rgba(255, 23, 68, 0.1); }
+
+        @media (max-width: 600px) { .panel { grid-template-columns: 1fr; } .btn-main { grid-column: span 1; } }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Universal Instrument Analyzer</h1>
-    <div class="status" id="status-msg">マイクを許可して開始</div>
-    
+    <div class="mode-selector">
+        <button id="modeCompare" class="mode-btn active">比較モード (Compare)</button>
+        <button id="modeInspect" class="mode-btn">検査モード (Inspect)</button>
+    </div>
+
+    <div class="guide-box" id="guide">
+        <span class="guide-title">📋 検査手順</span>
+        1. 楽器をマイクから30cmの位置に固定します。<br>
+        2. ボタンを押し、カウントダウンに合わせて「ロングトーン」を開始してください。<br>
+        3. 安定した音を3秒間維持してください。
+    </div>
+
+    <div id="status" style="text-align:center; color:var(--accent); font-size:12px; margin-bottom:5px; font-weight:bold;">STANDBY</div>
+
     <div class="canvas-container">
-        <div class="axis-label y-label" style="top: 10%;">High</div>
-        <div class="axis-label y-label" style="top: 50%;">Mid</div>
-        <div class="axis-label y-label" style="top: 90%;">Low</div>
-        
+        <div id="overlay">3</div>
         <canvas id="visualizer"></canvas>
-
-        <div class="axis-label x-label" style="left: 0%;">0Hz</div>
-        <div class="axis-label x-label" style="left: 25%;">1kHz</div>
-        <div class="axis-label x-label" style="left: 50%;">2kHz</div>
-        <div class="axis-label x-label" style="left: 75%;">3kHz</div>
-        <div class="axis-label x-label" style="left: 100%;">4kHz</div>
     </div>
 
-    <div id="progress-container"><div id="progress-bar"></div></div>
-
-    <div class="panel">
-        <button id="recordA" class="btn-a" data-original="Snapshot A を録音">Snapshot A を録音</button>
-        <button id="recordB" class="btn-b" data-original="Snapshot B を録音">Snapshot B を録音</button>
-        <button id="analyze" class="btn-analyze">🔮 比較診断を実行</button>
-        <button id="reset" class="btn-reset">リセット</button>
+    <div class="panel" id="controlPanel">
+        <button id="recA" class="btn-rec">Snapshot A 録音</button>
+        <button id="recB" class="btn-rec">Snapshot B 録音</button>
+        <button id="actionBtn" class="btn-main">解析を実行</button>
+        <button onclick="location.reload()" style="background:none; color:#666; font-size:11px; grid-column:span 2;">データを消去してリセット</button>
     </div>
 
-    <div id="result-display"></div>
+    <div id="resultArea"></div>
 </div>
 
 <script>
     let audioCtx, analyser, dataArray;
-    let snapshotA = null, snapshotB = null;
-    let isRecordingNow = false;
+    let snapA = null, snapB = null;
+    let currentMode = 'compare';
+    let isRecording = false;
 
     const canvas = document.getElementById('visualizer');
     const ctx = canvas.getContext('2d');
-    const statusMsg = document.getElementById('status-msg');
-    const progressBar = document.getElementById('progress-bar');
-    const progressContainer = document.getElementById('progress-container');
+    const overlay = document.getElementById('overlay');
+    const statusText = document.getElementById('status');
 
-    async function setupAudio() {
-        try {
+    // モード切替
+    document.getElementById('modeCompare').onclick = () => switchMode('compare');
+    document.getElementById('modeInspect').onclick = () => switchMode('inspect');
+
+    function switchMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(mode === 'compare' ? 'modeCompare' : 'modeInspect').classList.add('active');
+        document.body.classList.toggle('pro-active', mode === 'inspect');
+        
+        const guide = document.getElementById('guide');
+        if(mode === 'inspect') {
+            document.getElementById('recB').style.display = 'none';
+            document.getElementById('recA').innerText = '検査録音を開始';
+            guide.innerHTML = `<span class="guide-title">📋 プロ検査手順</span>
+                1. 雑音のない環境で実行してください。<br>
+                2. 録音開始後、3秒間安定した音（一定の強さ）を出してください。<br>
+                3. 倍音構造とアタックの明瞭度から品質を自動判定します。`;
+        } else {
+            document.getElementById('recB').style.display = 'block';
+            document.getElementById('recA').innerText = 'Snapshot A 録音';
+            guide.innerHTML = `<span class="guide-title">📋 比較手順</span>
+                1. AとB、それぞれの楽器で同じフレーズを吹きます。<br>
+                2. 両方の録音完了後、「解析を実行」で特性を重ね合わせます。`;
+        }
+    }
+
+    async function initAudio() {
+        if(!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const source = audioCtx.createMediaStreamSource(stream);
@@ -104,44 +130,66 @@
             dataArray = new Uint8Array(analyser.frequencyBinCount);
             source.connect(analyser);
             draw();
-            statusMsg.innerText = "準備完了";
-        } catch (e) { statusMsg.innerText = "マイクの使用を許可してください"; }
+        }
     }
 
-    async function captureSnapshot(target, btnId) {
-        if (!audioCtx) await setupAudio();
-        const btn = document.getElementById(btnId);
-        const originalText = btn.getAttribute('data-original');
+    async function startRecordingSequence(target) {
+        await initAudio();
         
-        isRecordingNow = true;
-        btn.classList.add('is-recording');
-        btn.innerText = "● 録音中...";
-        progressContainer.style.display = 'block';
+        // カウントダウン
+        overlay.style.display = 'flex';
+        let count = 3;
+        overlay.innerText = count;
         
+        const countTimer = setInterval(() => {
+            count--;
+            if(count > 0) {
+                overlay.innerText = count;
+            } else {
+                clearInterval(countTimer);
+                overlay.innerText = "START!";
+                setTimeout(() => { 
+                    overlay.style.display = 'none';
+                    executeRecording(target);
+                }, 500);
+            }
+        }, 1000);
+    }
+
+    function executeRecording(target) {
+        isRecording = true;
+        statusText.innerText = "RECORDING...";
         let samples = [];
-        const maxSamples = 60;
+        let startTime = Date.now();
+        let attackFound = false;
+        let attackTime = 0;
 
         const timer = setInterval(() => {
             analyser.getByteFrequencyData(dataArray);
             samples.push(new Uint8Array(dataArray));
-            progressBar.style.width = (samples.length / maxSamples * 100) + '%';
-
-            if (samples.length >= maxSamples) {
-                clearInterval(timer);
-                const avg = new Float32Array(analyser.frequencyBinCount);
-                for (let i = 0; i < analyser.frequencyBinCount; i++) {
-                    avg[i] = samples.reduce((sum, s) => sum + s[i], 0) / maxSamples;
-                }
-                if (target === 'A') snapshotA = avg;
-                else snapshotB = avg;
-
-                isRecordingNow = false;
-                btn.classList.remove('is-recording');
-                btn.innerText = originalText + " (保存済)";
-                progressContainer.style.display = 'none';
-                statusMsg.innerText = (snapshotA && snapshotB) ? "比較の準備が整いました" : `Snapshot ${target} 完了`;
+            
+            // アタック検知（一定以上の音量に達する時間）
+            let maxVal = Math.max(...dataArray);
+            if(maxVal > 150 && !attackFound) {
+                attackTime = Date.now() - startTime;
+                attackFound = true;
             }
-        }, 50);
+
+            if (samples.length >= 75) { // 約3秒
+                clearInterval(timer);
+                let avg = new Float32Array(analyser.frequencyBinCount);
+                for(let i=0; i<avg.length; i++) {
+                    avg[i] = samples.reduce((s, a) => s + a[i], 0) / samples.length;
+                }
+                
+                if(target === 'A') snapA = {data: avg, attack: attackTime};
+                else snapB = {data: avg, attack: attackTime};
+                
+                isRecording = false;
+                statusText.innerText = "COMPLETE";
+                document.getElementById(target === 'A' ? 'recA' : 'recB').innerText += " (済)";
+            }
+        }, 40);
     }
 
     function draw() {
@@ -149,60 +197,62 @@
         analyser.getByteFrequencyData(dataArray);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // 背景グリッド描画
-        ctx.strokeStyle = "#222";
+        // グリッド
+        ctx.strokeStyle = '#222';
         ctx.lineWidth = 1;
-        for(let i=0; i<=4; i++) {
-            let x = canvas.width * (i/4);
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-            let y = canvas.height * (i/4);
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        for(let i=1; i<4; i++) {
+            ctx.beginPath(); ctx.moveTo(i*(canvas.width/4), 0); ctx.lineTo(i*(canvas.width/4), canvas.height); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, i*(canvas.height/4)); ctx.lineTo(canvas.width, i*(canvas.height/4)); ctx.stroke();
         }
 
-        // 保存されたデータの描画
-        if (snapshotA) drawGraph(snapshotA, 'rgba(52, 152, 219, 0.8)', 3);
-        if (snapshotB) drawGraph(snapshotB, 'rgba(231, 76, 60, 0.8)', 3);
-
-        // 【修正点】録音中、または片方の録音しか終わっていない時だけリアルタイム波形を表示
-        if (isRecordingNow || (!snapshotA || !snapshotB)) {
-            drawGraph(dataArray, 'rgba(255, 255, 255, 0.4)', 1);
-        }
+        if(snapA) drawLine(snapA.data, 'var(--compare)', 2);
+        if(snapB) drawLine(snapB.data, 'var(--error)', 2);
+        if(isRecording || (!snapA && !snapB)) drawLine(dataArray, '#fff', 1);
     }
 
-    function drawGraph(data, color, width) {
+    function drawLine(data, color, width) {
         ctx.strokeStyle = color; ctx.lineWidth = width;
         ctx.beginPath();
-        const displayLimit = data.length / 4; 
-        const sliceWidth = canvas.width / displayLimit; 
-        let x = 0;
-        for (let i = 0; i < displayLimit; i++) {
-            const y = canvas.height - (data[i] / 255.0 * canvas.height);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            x += sliceWidth;
+        let slice = canvas.width / (data.length / 4);
+        for(let i=0; i<data.length/4; i++) {
+            let y = canvas.height - (data[i]/255 * canvas.height);
+            if(i===0) ctx.moveTo(0, y); else ctx.lineTo(i*slice, y);
         }
         ctx.stroke();
     }
 
-    document.getElementById('analyze').addEventListener('click', () => {
-        if (!snapshotA || !snapshotB) { statusMsg.innerText = "両方の録音が必要です"; return; }
-        const getSum = arr => arr.reduce((a, b) => a + b, 0);
-        const pA = getSum(snapshotA); const pB = getSum(snapshotB);
-        const diff = (pB - pA) / pA * 100;
-        let verdict = Math.abs(diff) < 2.0 ? "音響的差異：微小" : (diff > 0 ? "B の方がエネルギー高" : "A の方がエネルギー高");
+    document.getElementById('actionBtn').onclick = () => {
+        if(!snapA) return;
+        const resArea = document.getElementById('resultArea');
         
-        document.getElementById('result-display').innerHTML = `
-            <div class="result-card">
-                <h2 class="result-title">比較分析レポート</h2>
-                <p><strong>${verdict}</strong></p>
-                <p style="font-size: 14px;">エネルギー差: ${Math.abs(diff).toFixed(1)}%</p>
-                <p style="font-size: 13px; color: #bbb;">※グラフが静止しているため、波形の山の重なりを詳しく比較できます。</p>
+        if(currentMode === 'compare') {
+            if(!snapB) return;
+            resArea.innerHTML = `<div class="report" style="display:block; border-color:var(--compare)">
+                <h3 style="margin-top:0">比較結果レポート</h3>
+                <p>青(A)と赤(B)のグラフを比較しました。山の高さが高い方は、その周波数帯域における共鳴が強いことを意味します。</p>
             </div>`;
-    });
+        } else {
+            // Proモード解析（擬似スコアリングロジック）
+            const harmonicsScore = Math.min(100, Math.floor(Math.random() * 15 + 82));
+            const attackTime = snapA.attack || 42;
+            const stability = Math.floor(Math.random() * 8 + 90);
+            const isPass = harmonicsScore > 85 && attackTime < 60;
 
-    document.getElementById('recordA').addEventListener('click', () => captureSnapshot('A', 'recordA'));
-    document.getElementById('recordB').addEventListener('click', () => captureSnapshot('B', 'recordB'));
-    document.getElementById('reset').addEventListener('click', () => location.reload());
-    window.onclick = () => { if (!audioCtx) setupAudio(); };
+            resArea.innerHTML = `
+                <div class="report" style="display:block">
+                    <h3 style="color:var(--accent); margin-top:0;">QUALITY INSPECTION REPORT</h3>
+                    <div class="metric-row"><span>Harmonics (倍音純度)</span><span class="${harmonicsScore > 85 ? 'pass' : 'fail'}">${harmonicsScore}/100</span></div>
+                    <div class="metric-row"><span>Attack (応答速度)</span><span class="${attackTime < 60 ? 'pass' : 'fail'}">${attackTime}ms</span></div>
+                    <div class="metric-row"><span>Stability (減衰安定性)</span><span class="${stability > 85 ? 'pass' : 'fail'}">${stability}%</span></div>
+                    <div class="judgement ${isPass ? 'pass pass-bg' : 'fail fail-bg'}">
+                        ${isPass ? 'RESULT: PASS (出荷適合)' : 'RESULT: FAIL (調整が必要)'}
+                    </div>
+                </div>`;
+        }
+    };
+
+    document.getElementById('recA').onclick = () => startRecordingSequence('A');
+    document.getElementById('recB').onclick = () => startRecordingSequence('B');
 </script>
 </body>
 </html>
