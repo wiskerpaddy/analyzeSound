@@ -2,56 +2,87 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Saxophone Analytics Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Instrument Analyzer Pro</title>
     <style>
         :root {
             --bg-color: #121212;
             --card-bg: #1e1e1e;
-            --yas280: #3498db;
-            --yas480: #e74c3c;
+            --color-a: #3498db;
+            --color-b: #e74c3c;
             --accent: #f1c40f;
+            --recording: #c0392b;
+            --grid-color: #333;
         }
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg-color); color: white; margin: 0; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg-color); color: white; margin: 0; padding: 15px; }
         .container { max-width: 900px; margin: 0 auto; }
         
-        /* グラフエリア */
-        canvas { background: #000; border-radius: 10px; width: 100%; height: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        
-        /* コントロールパネル */
-        .panel { background: var(--card-bg); padding: 20px; border-radius: 12px; margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-        
-        button { padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; font-size: 14px; }
-        button:active { transform: scale(0.95); }
-        .btn-a { background: var(--yas280); color: white; }
-        .btn-b { background: var(--yas480); color: white; }
-        .btn-analyze { background: var(--accent); color: black; grid-column: span 2; font-size: 18px; }
-        .btn-reset { background: #444; color: #ccc; }
+        h1 { font-size: 1.5rem; text-align: center; margin-bottom: 10px; }
+        .status { color: var(--accent); font-size: 13px; text-align: center; margin-bottom: 10px; height: 1.2em; font-weight: bold; }
 
-        /* 診断結果表示（占い風） */
-        #result-display { margin-top: 25px; transition: all 0.5s ease; }
-        .result-card { background: linear-gradient(145deg, #2c3e50, #000); border: 2px solid var(--accent); padding: 25px; border-radius: 15px; text-align: left; animation: fadeIn 0.8s; }
-        .result-title { color: var(--accent); font-size: 24px; margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px; }
-        .score-box { display: flex; justify-content: space-between; margin: 15px 0; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px; }
+        /* グラフコンテナ */
+        .canvas-container { position: relative; background: #000; border-radius: 10px; padding: 20px 10px 30px 40px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        canvas { width: 100%; height: 250px; display: block; }
         
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .hidden { display: none; }
-        .status { color: var(--accent); font-size: 14px; margin-bottom: 10px; height: 1.2em; }
+        /* 軸ラベル */
+        .axis-label { position: absolute; font-size: 10px; color: #888; }
+        .y-label { left: 5px; transform: translateY(-50%); }
+        .x-label { bottom: 5px; transform: translateX(-50%); }
+
+        #progress-container { width: 100%; background: #333; height: 8px; border-radius: 4px; margin: 10px 0; overflow: hidden; display: none; }
+        #progress-bar { width: 0%; height: 100%; background: var(--accent); transition: width 0.1s linear; }
+
+        .panel { background: var(--card-bg); padding: 15px; border-radius: 12px; margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 15px 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; }
+        .btn-a { background: var(--color-a); color: white; }
+        .btn-b { background: var(--color-b); color: white; }
+        .btn-analyze { background: var(--accent); color: black; grid-column: span 2; font-size: 18px; margin-top: 5px; }
+        .btn-reset { background: #444; color: #ccc; grid-column: span 2; }
+
+        @media (max-width: 768px) {
+            .panel { grid-template-columns: 1fr; }
+            .btn-a, .btn-b { padding: 20px 10px; font-size: 16px; }
+            canvas { height: 200px; }
+        }
+
+        .is-recording { background: white !important; color: var(--recording) !important; animation: blink 0.8s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        #result-display { margin-top: 20px; }
+        .result-card { background: linear-gradient(145deg, #2c3e50, #000); border: 2px solid var(--accent); padding: 20px; border-radius: 15px; animation: fadeIn 0.5s; }
+        .result-title { color: var(--accent); font-size: 20px; margin: 0 0 10px 0; border-bottom: 1px solid #444; padding-bottom: 5px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Saxophone Tone Analyzer</h1>
-    <p>2つの楽器を吹き比べ、その「音の成分」からポテンシャルを診断します。</p>
+    <h1>Universal Instrument Analyzer</h1>
+    <div class="status" id="status-msg">マイクを許可して解析を開始</div>
+    
+    <div class="canvas-container">
+        <!-- 縦軸目盛り -->
+        <div class="axis-label y-label" style="top: 10%;">dB</div>
+        <div class="axis-label y-label" style="top: 50%;">mid</div>
+        <div class="axis-label y-label" style="top: 90%;">low</div>
+        
+        <canvas id="visualizer"></canvas>
 
-    <div class="status" id="status-msg">マイクを許可して開始してください</div>
-    <canvas id="visualizer"></canvas>
+        <!-- 横軸目盛り (低域〜中域をメインに表示) -->
+        <div class="axis-label x-label" style="left: 0%;">0Hz</div>
+        <div class="axis-label x-label" style="left: 25%;">1kHz</div>
+        <div class="axis-label x-label" style="left: 50%;">2kHz</div>
+        <div class="axis-label x-label" style="left: 75%;">3kHz</div>
+        <div class="axis-label x-label" style="left: 100%;">4kHz</div>
+    </div>
+
+    <div id="progress-container"><div id="progress-bar"></div></div>
 
     <div class="panel">
-        <button id="recordA" class="btn-a">Snapshot A (YAS-280) を記録</button>
-        <button id="recordB" class="btn-b">Snapshot B (YAS-480) を記録</button>
+        <button id="recordA" class="btn-a" data-original="Snapshot A を録音">Snapshot A を録音</button>
+        <button id="recordB" class="btn-b" data-original="Snapshot B を録音">Snapshot B を録音</button>
+        <button id="analyze" class="btn-analyze">🔮 音響特性を比較診断</button>
         <button id="reset" class="btn-reset">リセット</button>
-        <button id="analyze" class="btn-analyze">🔮 楽器ポテンシャルを診断する</button>
     </div>
 
     <div id="result-display"></div>
@@ -60,11 +91,12 @@
 <script>
     let audioCtx, analyser, dataArray;
     let snapshotA = null, snapshotB = null;
-    let isRecording = false;
 
     const canvas = document.getElementById('visualizer');
     const ctx = canvas.getContext('2d');
     const statusMsg = document.getElementById('status-msg');
+    const progressBar = document.getElementById('progress-bar');
+    const progressContainer = document.getElementById('progress-container');
 
     async function setupAudio() {
         try {
@@ -76,23 +108,24 @@
             dataArray = new Uint8Array(analyser.frequencyBinCount);
             source.connect(analyser);
             draw();
-            statusMsg.innerText = "マイク準備完了。楽器を鳴らしてください。";
-        } catch (e) {
-            statusMsg.innerText = "マイクの使用が拒否されました。";
-        }
+            statusMsg.innerText = "準備完了";
+        } catch (e) { statusMsg.innerText = "マイクの使用を許可してください"; }
     }
 
-    async function captureSnapshot(target) {
+    async function captureSnapshot(target, btnId) {
         if (!audioCtx) await setupAudio();
-        isRecording = true;
-        statusMsg.innerText = `【${target}】解析中... 安定した音を3秒出してください`;
-        
+        const btn = document.getElementById(btnId);
+        const originalText = btn.getAttribute('data-original');
+        btn.classList.add('is-recording');
+        btn.innerText = "● 録音中...";
+        progressContainer.style.display = 'block';
         let samples = [];
-        const maxSamples = 50; 
+        const maxSamples = 60;
 
         const timer = setInterval(() => {
             analyser.getByteFrequencyData(dataArray);
             samples.push(new Uint8Array(dataArray));
+            progressBar.style.width = (samples.length / maxSamples * 100) + '%';
             if (samples.length >= maxSamples) {
                 clearInterval(timer);
                 const avg = new Float32Array(analyser.frequencyBinCount);
@@ -101,123 +134,72 @@
                 }
                 if (target === 'A') snapshotA = avg;
                 else snapshotB = avg;
-                isRecording = false;
-                statusMsg.innerText = `Snapshot ${target} 保存完了！`;
+                btn.classList.remove('is-recording');
+                btn.innerText = originalText + " (済)";
+                progressContainer.style.display = 'none';
+                statusMsg.innerText = `Snapshot ${target} 完了`;
             }
-        }, 30);
+        }, 50);
     }
 
     function draw() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // ガイドライン（周波数軸）
-        ctx.strokeStyle = "#333";
+        
+        // 背景グリッド描画
+        ctx.strokeStyle = "#222";
         ctx.lineWidth = 1;
-        for(let i=1; i<4; i++) {
-            ctx.beginPath();
-            ctx.moveTo(canvas.width * (i/4), 0);
-            ctx.lineTo(canvas.width * (i/4), canvas.height);
-            ctx.stroke();
+        // 縦線
+        for(let i=0; i<=4; i++) {
+            let x = canvas.width * (i/4);
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        }
+        // 横線
+        for(let i=0; i<=4; i++) {
+            let y = canvas.height * (i/4);
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
         }
 
-        if (snapshotA) drawGraph(snapshotA, 'rgba(52, 152, 219, 0.6)', 3); // 青
-        if (snapshotB) drawGraph(snapshotB, 'rgba(231, 76, 60, 0.6)', 3);  // 赤
-        drawGraph(dataArray, 'rgba(255, 255, 255, 0.8)', 1); // 現在の音
+        if (snapshotA) drawGraph(snapshotA, 'rgba(52, 152, 219, 0.7)', 2);
+        if (snapshotB) drawGraph(snapshotB, 'rgba(231, 76, 60, 0.7)', 2);
+        drawGraph(dataArray, 'rgba(255, 255, 255, 0.5)', 1);
     }
 
     function drawGraph(data, color, width) {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
+        ctx.strokeStyle = color; ctx.lineWidth = width;
         ctx.beginPath();
-        const sliceWidth = canvas.width / (data.length / 4); 
+        // サックス等の楽器の主成分である4kHzまでをクローズアップ (サンプルレートの約1/10)
+        const displayLimit = data.length / 4; 
+        const sliceWidth = canvas.width / displayLimit; 
         let x = 0;
-        for (let i = 0; i < data.length / 4; i++) {
-            const v = data[i] / 255.0;
-            const y = canvas.height - (v * canvas.height);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
+        for (let i = 0; i < displayLimit; i++) {
+            const y = canvas.height - (data[i] / 255.0 * canvas.height);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             x += sliceWidth;
         }
         ctx.stroke();
     }
 
-    // --- 診断ロジック ---
     document.getElementById('analyze').addEventListener('click', () => {
-        if (!snapshotA || !snapshotB) {
-            statusMsg.innerText = "⚠️ 比較にはAとB両方のスナップショットが必要です！";
-            return;
-        }
-
-        // 1. パワー（エネルギー面積）比較
+        if (!snapshotA || !snapshotB) { statusMsg.innerText = "両方の録音が必要です"; return; }
         const getSum = arr => arr.reduce((a, b) => a + b, 0);
-        const pA = getSum(snapshotA);
-        const pB = getSum(snapshotB);
-        
-        // 2. 音の明るさ（重心）計算
-        const getCentroid = (data) => {
-            let n=0, d=0;
-            data.forEach((v, i) => { n += i * v; d += v; });
-            return n / d;
-        };
-        const cA = getCentroid(snapshotA);
-        const cB = getCentroid(snapshotB);
-
-        // 3. 結果の生成
-        let resultHTML = "";
-        const diffPower = ((pB / pA) - 1) * 100;
-        const diffCentroid = cB - cA;
-
-        if (pB > pA * 1.05) {
-            resultHTML = `
-                <div class="result-card">
-                    <h2 class="result-title">🔮 診断結果：深淵なる響きの「480」</h2>
-                    <p>解析の結果、YAS-480は280と比較して<b>音の成分が ${diffPower.toFixed(1)}% 濃密</b>であることが判明しました。</p>
-                    <div class="score-box">
-                        <span>音の太さ（エネルギー）: 480 圧勝</span>
-                        <span>表現の幅: 特大</span>
-                    </div>
-                    <p>アドバイス：480は管体全体の共鳴が強く、特に中低域に「芯」があります。初心者から一歩踏み出し、自分の音色を作っていきたいあなたには、480が最高の相棒になるでしょう。</p>
-                </div>`;
-        } else if (pA > pB * 1.05) {
-            resultHTML = `
-                <div class="result-card">
-                    <h2 class="result-title">🔮 診断結果：快速レスポンスの「280」</h2>
-                    <p>現在の吹き方では、YAS-280の方が効率よく音が前へ飛んでいます。</p>
-                    <div class="score-box">
-                        <span>鳴らしやすさ: 280 優勢</span>
-                        <span>音の明るさ: 非常に明快</span>
-                    </div>
-                    <p>アドバイス：280は非常に軽量で、息を入れた瞬間に音になる感覚が優れています。まずはストレスなく練習時間を確保したい、という今のスタイルには280が適している可能性があります。</p>
-                </div>`;
-        } else {
-            resultHTML = `
-                <div class="result-card">
-                    <h2 class="result-title">🔮 診断結果：均衡するポテンシャル</h2>
-                    <p>両モデルの音響特性は非常に拮抗しています。数値上の差よりも、吹いた時の「指のなじみ」や「見た目の好み」が決定打になります。</p>
-                    <div class="score-box">
-                        <span>安定感: 互角</span>
-                        <span>将来性: 480（カスタムネック対応）</span>
-                    </div>
-                    <p>アドバイス：480は将来的にネックを交換してカスタマイズできる楽しみがあります。迷ったら、後悔しない「上のグレード」を選んでおくのがITエンジニア的な最適解かもしれません。</p>
-                </div>`;
-        }
-
-        document.getElementById('result-display').innerHTML = resultHTML;
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        const pA = getSum(snapshotA); const pB = getSum(snapshotB);
+        const diff = (pB - pA) / pA * 100;
+        let verdict = Math.abs(diff) < 2.0 ? "音響的差異：微小" : (diff > 0 ? "Snapshot B 優勢" : "Snapshot A 優勢");
+        document.getElementById('result-display').innerHTML = `
+            <div class="result-card">
+                <h2 class="result-title">分析レポート</h2>
+                <p><strong>${verdict}</strong></p>
+                <p style="font-size: 14px;">エネルギー差: ${Math.abs(diff).toFixed(1)}%</p>
+                <p style="font-size: 14px; color: var(--accent);">グラフの各ピークは「倍音」を示します。ピークが高いほど、その帯域が豊かに響いています。</p>
+            </div>`;
     });
 
-    document.getElementById('recordA').addEventListener('click', () => captureSnapshot('A'));
-    document.getElementById('recordB').addEventListener('click', () => captureSnapshot('B'));
-    document.getElementById('reset').addEventListener('click', () => {
-        snapshotA = null; snapshotB = null;
-        document.getElementById('result-display').innerHTML = "";
-        statusMsg.innerText = "データをリセットしました。";
-    });
-
+    document.getElementById('recordA').addEventListener('click', () => captureSnapshot('A', 'recordA'));
+    document.getElementById('recordB').addEventListener('click', () => captureSnapshot('B', 'recordB'));
+    document.getElementById('reset').addEventListener('click', () => location.reload());
     window.onclick = () => { if (!audioCtx) setupAudio(); };
 </script>
-
 </body>
 </html>
