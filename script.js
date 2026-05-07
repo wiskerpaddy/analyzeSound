@@ -33,7 +33,6 @@ function switchMode(mode) {
     document.getElementById('recB').innerText = 'Snapshot B 録音';
     document.getElementById('recB').style.display = mode === 'inspect' ? 'none' : 'block';
 
-    // 描画ループが止まっていたら再開
     if (!animationId && audioCtx) draw();
 }
 
@@ -48,14 +47,10 @@ async function startRecording(target) {
         source.connect(analyser);
     }
     
-    // --- 修正ポイント：再録音への対応 ---
     if(target === 'A') snapA = null; else snapB = null;
     isRecording = false;
-    
-    // 結果エリアを少し薄くして「更新中」であることを示す（任意）
     document.getElementById('resultArea').style.opacity = "0.5";
     
-    // 停止していた描画を再開
     if(!animationId) draw();
 
     const overlay = document.getElementById('overlay');
@@ -71,7 +66,7 @@ async function startRecording(target) {
             overlay.innerText = "START!";
             setTimeout(() => {
                 overlay.style.display = 'none';
-                executeRecording(target); // 録音実行
+                executeRecording(target); 
             }, 500);
         }
     }, 1000);
@@ -106,78 +101,110 @@ function executeRecording(target) {
 }
 
 function runAnalysis() {
-    const area = document.getElementById('resultArea');
-    
-    // 透明度を直接数字でいじるのをやめ、クラスで管理する
-    area.classList.remove('loading'); 
-    area.classList.add('ready');
-    
-    // 【本質抽出ロジック】
-    // 1. 周波数特性（スペクトル分布）は時間軸を持たないため、そもそもタイミングに依存しません。
-    // 2. 反応速度のみ、立ち上がりの「差」として相対的に算出します。
-
-    area.style.opacity = "1";
-    if(currentMode === 'compare') {
-        if(!snapA || !snapB) return;
-        // 純粋な周波数成分の比較
-        const charA = analyzeTimbre(snapA.data);
-        const charB = analyzeTimbre(snapB.data);
-
-        area.innerHTML = `
-            <div class="report" style="opacity: 1 !important;"> 
-                <h3 style="color: #fff;">楽器特性 比較レポート</h3>
-                <p style="font-size:11px; color:#888; margin-bottom:10px;">
-                    ※発音タイミングのズレは自動補正済みです。純粋な楽器の響きを比較しています。
-                </p>
-                
-                <div class="metric-row" title="音の密度。波形の山の太さを解析。">
-                    <span><strong>響きの太さ (Core)</strong> ⓘ</span>
-                    <span class="pass">${charA.power > charB.power ? '楽器Aが濃厚' : '楽器Bが濃厚'}</span>
-                </div>
-                
-                <div class="metric-row" title="高次倍音のキラキラした成分。">
-                    <span><strong>音の明るさ (Bright)</strong> ⓘ</span>
-                    <span class="pass">${charA.high > charB.high ? '楽器Aが明瞭' : '楽器Bが明瞭'}</span>
-                </div>
-
-                <div class="metric-row" title="入力に対してどれだけ素直に反応するか。">
-                    <span><strong>レスポンス効率</strong> ⓘ</span>
-                    <span class="pass">${snapA.attack < snapB.attack ? '楽器Aが効率的' : '楽器Bが効率的'}</span>
-                </div>
-            </div>`;
+    if (currentMode === 'compare') {
+        if (!snapA || !snapB) {
+            alert("比較には Snapshot A と B 両方の録音が必要です。");
+            return;
+        }
+    } else {
+        if (!snapA) {
+            alert("検査用の録音が完了していません。");
+            return;
+        }
     }
+
+    const resultArea = document.getElementById('resultArea');
+    resultArea.innerHTML = '<div class="loading">解析中...</div>';
+    resultArea.style.opacity = "1";
+
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+
+    setTimeout(() => {
+        if (currentMode === 'compare') {
+            displayCompareResult();
+        } else {
+            displayInspectResult();
+        }
+    }, 500);
 }
 
-// 時間軸に依存しない音色解析関数
-function analyzeTimbre(data) {
-    // 1. ノイズ除去：一定以下の小さな音（端切れ）を除外して、
-    // 「実際に楽器が鳴っている成分」だけを抽出する
-    const activeData = data.filter(v => v > 10); 
-    
-    if (activeData.length === 0) return { power: 0, high: 0 };
+function displayCompareResult() {
+    const area = document.getElementById('resultArea');
+    // analyzeSpectrum ではなく analyzeTimbre を使用
+    const charA = analyzeTimbre(snapA.data);
+    const charB = analyzeTimbre(snapB.data);
 
-    // 2. 音量の正規化：全体の合計で割ることで、
-    // 「吹く強さ」や「マイクとの距離」の差を完全にキャンセルする
+    area.innerHTML = `
+        <div class="report" style="opacity: 1 !important;"> 
+            <h3 style="color: #fff;">楽器特性 比較レポート</h3>
+            <p style="font-size:11px; color:#888; margin-bottom:10px;">
+                ※AとBの周波数特性を対比解析しました。
+            </p>
+            <div class="metric-row">
+                <span><strong>響きの太さ (Core)</strong></span>
+                <span class="pass">${charA.power > charB.power ? '楽器Aが濃厚' : '楽器Bが濃厚'}</span>
+            </div>
+            <div class="metric-row">
+                <span><strong>音の明るさ (Bright)</strong></span>
+                <span class="pass">${charA.high > charB.high ? '楽器Aが明瞭' : '楽器Bが明瞭'}</span>
+            </div>
+            <div class="metric-row">
+                <span><strong>レスポンス効率</strong></span>
+                <span class="pass">${(snapA.attack || 0) < (snapB.attack || 0) ? '楽器Aが俊敏' : '楽器Bが俊敏'}</span>
+            </div>
+        </div>`;
+}
+
+function displayInspectResult() {
+    const area = document.getElementById('resultArea');
+    // analyzeSpectrum ではなく analyzeTimbre を使用
+    const charA = analyzeTimbre(snapA.data);
+    
+    area.innerHTML = `
+        <div class="report" style="opacity: 1 !important;"> 
+            <h3 style="color: #fff;">楽器特性 検査レポート</h3>
+            <p style="font-size:11px; color:#888; margin-bottom:10px;">
+                ※単体の響きを精密解析した結果です。
+            </p>
+            <div class="metric-row">
+                <span><strong>響きの太さ (Core)</strong></span>
+                <span class="pass">${charA.power.toFixed(1)} %</span>
+            </div>
+            <div class="metric-row">
+                <span><strong>音の明るさ (Bright)</strong></span>
+                <span class="pass">${charA.high.toFixed(1)} %</span>
+            </div>
+            <div class="metric-row">
+                <span><strong>レスポンス強度</strong></span>
+                <span class="pass">${(100 - (snapA.attack || 0)).toFixed(1)} %</span>
+            </div>
+            <div style="margin-top:15px; padding-top:10px; border-top:1px solid #444;">
+                <p style="font-size:12px; color:#ddd;">
+                    【特性診断】: ${charA.power > 25 ? '中低域に芯がある、力強い個体です。' : '高域まで素直に伸びる、繊細な個体です。'}
+                </p>
+            </div>
+        </div>`;
+}
+
+function analyzeTimbre(data) {
+    const activeData = data.filter(v => v > 10); 
+    if (activeData.length === 0) return { power: 0, high: 0 };
     const totalEnergy = activeData.reduce((a, b) => a + b, 0);
 
-    // 3. 比率計算（％）：音量ではなく「音の成分構成」だけで判定
-    // 低～中域（芯の太さ）
     const powerRatio = (activeData.slice(0, 40).reduce((a, b) => a + b, 0) / totalEnergy) * 100;
-    // 高域（キラキラ感・キレ）
     const highRatio = (activeData.slice(40, 120).reduce((a, b) => a + b, 0) / totalEnergy) * 100;
 
     return { power: powerRatio, high: highRatio };
 }
 
-
 function draw() {
-    // 録音完了かつデータがある場合はループを止める
     if (!isRecording && (snapA || snapB) && currentMode === 'inspect') {
         cancelAnimationFrame(animationId);
         animationId = null;
         return;
     }
-    
     animationId = requestAnimationFrame(draw);
     analyser.getByteFrequencyData(dataArray);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
