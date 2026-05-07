@@ -21,19 +21,17 @@ function switchMode(mode) {
     currentMode = mode;
     document.body.className = mode + '-mode';
     
-    // 状態を完全にクリア
     snapA = null; 
     snapB = null;
     isRecording = false;
     document.getElementById('status').innerText = "STANDBY";
     document.getElementById('resultArea').innerHTML = '';
     
-    // ボタンのテキストを初期化
     document.getElementById('recA').innerText = mode === 'inspect' ? '検査録音を開始' : 'Snapshot A 録音';
     document.getElementById('recB').innerText = 'Snapshot B 録音';
     document.getElementById('recB').style.display = mode === 'inspect' ? 'none' : 'block';
 
-    if (!animationId && audioCtx) draw();
+    stopDrawing(); // モード切替時に描画を停止
 }
 
 async function startRecording(target) {
@@ -51,8 +49,6 @@ async function startRecording(target) {
     isRecording = false;
     document.getElementById('resultArea').style.opacity = "0.5";
     
-    if(!animationId) draw();
-
     const overlay = document.getElementById('overlay');
     overlay.style.display = 'flex';
     let count = 3;
@@ -74,6 +70,8 @@ async function startRecording(target) {
 
 function executeRecording(target) {
     isRecording = true;
+    if(!animationId) draw(); // 録音開始時に描画ループを起動
+
     document.getElementById('status').innerText = "RECORDING...";
     let samples = [];
     let start = Date.now();
@@ -93,6 +91,8 @@ function executeRecording(target) {
             else snapB = {data: avg, attack};
             
             isRecording = false;
+            stopDrawing(); // 録音完了時にループを停止して固定描画に切り替え
+
             document.getElementById('status').innerText = "DONE";
             const btn = document.getElementById(target === 'A' ? 'recA' : 'recB');
             btn.innerText = (currentMode === 'inspect' ? "検査録音" : "Snapshot " + target) + " [完了]";
@@ -113,6 +113,8 @@ function runAnalysis() {
         }
     }
 
+    stopDrawing(); // 解析ボタンが押された瞬間に描画（モニタ）を確実に止める
+
     const resultArea = document.getElementById('resultArea');
     resultArea.innerHTML = '<div class="loading">解析中...</div>';
     resultArea.style.opacity = "1";
@@ -132,16 +134,13 @@ function runAnalysis() {
 
 function displayCompareResult() {
     const area = document.getElementById('resultArea');
-    // analyzeSpectrum ではなく analyzeTimbre を使用
+    // analyzeSpectrum ではなく、定義されている analyzeTimbre を呼び出すように修正
     const charA = analyzeTimbre(snapA.data);
     const charB = analyzeTimbre(snapB.data);
 
     area.innerHTML = `
         <div class="report" style="opacity: 1 !important;"> 
             <h3 style="color: #fff;">楽器特性 比較レポート</h3>
-            <p style="font-size:11px; color:#888; margin-bottom:10px;">
-                ※AとBの周波数特性を対比解析しました。
-            </p>
             <div class="metric-row">
                 <span><strong>響きの太さ (Core)</strong></span>
                 <span class="pass">${charA.power > charB.power ? '楽器Aが濃厚' : '楽器Bが濃厚'}</span>
@@ -159,15 +158,11 @@ function displayCompareResult() {
 
 function displayInspectResult() {
     const area = document.getElementById('resultArea');
-    // analyzeSpectrum ではなく analyzeTimbre を使用
     const charA = analyzeTimbre(snapA.data);
     
     area.innerHTML = `
         <div class="report" style="opacity: 1 !important;"> 
             <h3 style="color: #fff;">楽器特性 検査レポート</h3>
-            <p style="font-size:11px; color:#888; margin-bottom:10px;">
-                ※単体の響きを精密解析した結果です。
-            </p>
             <div class="metric-row">
                 <span><strong>響きの太さ (Core)</strong></span>
                 <span class="pass">${charA.power.toFixed(1)} %</span>
@@ -180,12 +175,50 @@ function displayInspectResult() {
                 <span><strong>レスポンス強度</strong></span>
                 <span class="pass">${(100 - (snapA.attack || 0)).toFixed(1)} %</span>
             </div>
-            <div style="margin-top:15px; padding-top:10px; border-top:1px solid #444;">
-                <p style="font-size:12px; color:#ddd;">
-                    【特性診断】: ${charA.power > 25 ? '中低域に芯がある、力強い個体です。' : '高域まで素直に伸びる、繊細な個体です。'}
-                </p>
-            </div>
         </div>`;
+}
+
+function stopDrawing() {
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+    renderStaticView(); // ループ停止後に録音済みデータを一回だけ静止画描画
+}
+
+function renderStaticView() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if(snapA) drawLine(snapA.data, '#2196f3', 2);
+    if(snapB) drawLine(snapB.data, '#ff5252', 2);
+}
+
+function draw() {
+    if (!isRecording) {
+        stopDrawing();
+        return;
+    }
+    
+    animationId = requestAnimationFrame(draw);
+    analyser.getByteFrequencyData(dataArray);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 録音中のリアルタイム波形
+    drawLine(dataArray, '#fff', 1);
+    
+    // 録音済みの比較用ライン
+    if(snapA) drawLine(snapA.data, '#2196f3', 2);
+    if(snapB) drawLine(snapB.data, '#ff5252', 2);
+}
+
+function drawLine(data, color, width) {
+    ctx.strokeStyle = color; ctx.lineWidth = width;
+    ctx.beginPath();
+    let slice = canvas.width / (data.length / 4);
+    for(let i=0; i<data.length/4; i++) {
+        let y = canvas.height - (data[i]/255 * canvas.height);
+        if(i===0) ctx.moveTo(0, y); else ctx.lineTo(i*slice, y);
+    }
+    ctx.stroke();
 }
 
 function analyzeTimbre(data) {
@@ -199,19 +232,41 @@ function analyzeTimbre(data) {
     return { power: powerRatio, high: highRatio };
 }
 
-function draw() {
-    if (!isRecording && (snapA || snapB) && currentMode === 'inspect') {
+function stopDrawing() {
+    if (animationId) {
         cancelAnimationFrame(animationId);
         animationId = null;
+    }
+    // 停止時にキャンバスをクリアし、録音済みの静止波形があれば描画する
+    renderStaticView();
+}
+
+/**
+ * 現在保持しているスナップショットを静止画として描画
+ */
+function renderStaticView() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if(snapA) drawLine(snapA.data, '#2196f3', 2);
+    if(snapB) drawLine(snapB.data, '#ff5252', 2);
+}
+
+function draw() {
+    // 録音中のみアニメーションを継続する
+    if (!isRecording) {
+        stopDrawing();
         return;
     }
+    
     animationId = requestAnimationFrame(draw);
     analyser.getByteFrequencyData(dataArray);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
+    // 録音中のリアルタイム波形（白）
+    drawLine(dataArray, '#fff', 1);
+    
+    // 既に録音済みのデータがあれば重ねて表示
     if(snapA) drawLine(snapA.data, '#2196f3', 2);
     if(snapB) drawLine(snapB.data, '#ff5252', 2);
-    if(isRecording || (!snapA && !snapB)) drawLine(dataArray, '#fff', 1);
 }
 
 function drawLine(data, color, width) {
